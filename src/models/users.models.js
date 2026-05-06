@@ -77,10 +77,6 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    avatar: {
-      type: String,
-    },
-
     isDeleted: {
       type: Boolean,
       default: false,
@@ -110,6 +106,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+// JWT generation
 userSchema.methods.createRefreshToken = function () {
   return jwt.sign(
     {
