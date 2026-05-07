@@ -95,10 +95,10 @@ userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
 
 // Password hashing
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+
   this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
 // Compare password
