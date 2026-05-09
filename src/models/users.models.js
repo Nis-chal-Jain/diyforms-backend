@@ -107,7 +107,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 };
 
 // JWT generation
-userSchema.methods.createRefreshToken = function () {
+userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {
       _id: this._id,
