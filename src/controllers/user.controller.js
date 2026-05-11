@@ -58,7 +58,7 @@ const signUp =  asyncHandler(async (req,res) =>{
 const login = asyncHandler(async (req,res) =>{
     const {email,username,password} = req.body;
 
-    if((!email || !username) || !password){
+    if((!email && !username) || !password){
         throw new ApiError(400,"Credentials are required")
     }
 
@@ -165,9 +165,43 @@ const refreshAccessToken = asyncHandler(async (req,res) =>{
     }
 })
 
+const updatePassword = asyncHandler(async (req,res) =>{
+    try {
+        const id = req.user?._id
+        const user = await User.findById(id).select("+password")
+
+        if(!user){
+            throw new ApiError(404,"User not found")
+        }
+    
+        const {currentPassword, newPassword} = req.body
+    
+        if(!currentPassword || !newPassword){
+            throw new ApiError(400,"Current and new password are required")
+        }
+    
+        const isCurrentPasswordValid = await user.comparePassword(currentPassword)
+    
+        if(!isCurrentPasswordValid){
+            throw new ApiError(401,"Current password is incorrect")
+        }
+    
+        user.password = newPassword
+        await user.save({validateBeforeSave: false})
+        
+        return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Password updated successfully"))
+
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Unauthorized")
+    }
+})
+
 export {
     signUp,
     login,
     logout,
-    refreshAccessToken
+    refreshAccessToken,
+    updatePassword
 }
