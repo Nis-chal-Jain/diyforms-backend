@@ -110,10 +110,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {
-      _id: this._id,
-      email: this.email,
-      username: this.username,
-      fullName: this.name,
+      _id: this._id
     },
     process.env.JWT_REFRESH_SECRET,
     {
@@ -125,7 +122,7 @@ userSchema.methods.generateRefreshToken = function () {
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
-      _id: this._id,
+      _id: this._id
     },
     process.env.JWT_ACCESS_SECRET,
     {
