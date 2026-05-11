@@ -90,10 +90,6 @@ const userSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Indexes
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
-
 // Password hashing
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
