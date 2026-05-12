@@ -51,7 +51,15 @@ const signUp =  asyncHandler(async (req,res) =>{
             throw new ApiError(500,"User creation failed")
         }
 
-        return res.status(201).json(new ApiResponse(201,"User created successfully",createdUser)) 
+        return res
+        .status(201)
+        .json(new ApiResponse(
+            201,
+            {
+                user: createdUser 
+            },
+            "User created successfully"
+        )) 
 }
 )
 
