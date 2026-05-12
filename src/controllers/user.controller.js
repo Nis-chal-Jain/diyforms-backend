@@ -194,13 +194,18 @@ const updatePassword = asyncHandler(async (req,res) =>{
             throw new ApiError(401,"Current password is incorrect")
         }
     
-        user.password = newPassword
-        await user.save({validateBeforeSave: false})
-        
-        return res
-        .status(200)
-        .json(new ApiResponse(200, {}, "Password updated successfully"))
-
+        try {
+            user.password = newPassword
+            await user.validate(["password"])
+            await user.save({validateBeforeSave: false})
+            
+            return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Password updated successfully"))
+    
+        } catch (error) {
+            throw new ApiError(500, error?.message || "Failed to update password")
+        }
     } catch (error) {
         throw new ApiError(401, error?.message || "Unauthorized")
     }
