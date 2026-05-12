@@ -198,10 +198,51 @@ const updatePassword = asyncHandler(async (req,res) =>{
     }
 })
 
+const updatename = asyncHandler(async (req,res) =>{
+
+    const {name} = req.body
+
+    if(!name){
+        throw new ApiError(400,"Name is required")
+    }
+
+    const userid = req.user?._id
+    const user = await User.findByIdAndUpdate(
+        userid,
+        {
+            name
+        },
+        {
+            new: true
+        }
+    ).select("-password -refreshToken")
+
+    if(!user){
+        throw new ApiError(404,"User not found")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, {user}, "Name updated successfully"))
+})
+
+const getUser = asyncHandler(async (req,res) =>{
+    const user = await User.findById(req.user._id).select("-password -refreshToken")
+    if(!user){
+        throw new ApiError(404,"User not found")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, {user}, "User fetched successfully"))
+})
+
 export {
     signUp,
     login,
+    getUser,
     logout,
     refreshAccessToken,
-    updatePassword
+    updatePassword,
+    updatename
 }
