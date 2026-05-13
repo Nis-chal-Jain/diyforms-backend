@@ -1,27 +1,36 @@
 import mongoose from "mongoose";
 
 const questionSchema = new mongoose.Schema({
+    order:{
+        type:Number,
+        required:true
+    },
     type:{
         type:String,
-        enum:["text","textarea","number","radio","checkbox"],
+        enum:["text","textarea","number","radio","checkbox","select"],
         required:true
     },
     label:{
         type:String,
         required:true
     },
+    description:String,
+    placeholder:String,
+
     required:{
         type:Boolean,
         default:false
     },
 
-    //only when the type is radio or checkbox
+    //only when the type is radio or checkbox or select
     options:[{
         value:{
             type:String,
             required:true
         }
     }],
+
+    //only when the type is number or text or textarea
     validation:{
         min:Number,
         max:Number,
@@ -39,9 +48,16 @@ const formSchema = new mongoose.Schema({
         index:true
     },
 
-    active:{
-        type:Boolean,
-        default:true
+    settings:{
+        status:{
+            type:String,
+            enum:["draft","published","archived"]
+        },
+
+        restricted:{
+            type:Boolean,
+            default:false
+        }
     },
 
     title:{
@@ -61,16 +77,6 @@ const formSchema = new mongoose.Schema({
         required:true
     },
 
-    restricted:{
-        type:Boolean,
-        default:false
-    },
-
-    allowedUsers:[{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:"User"
-    }],
-
     questions:[questionSchema],
 
     analyticsUpToDate:{
@@ -79,5 +85,7 @@ const formSchema = new mongoose.Schema({
     }
 
 },{ timestamps:true });
+
+formSchema.index({author:1})
 
 export const Form = mongoose.model("Form", formSchema);
