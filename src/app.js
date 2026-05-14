@@ -9,4 +9,7 @@ app.use(express.urlencoded({extended: true, limit: "16kb"}))
 import userRoutes from './routes/user.routes.js';
 app.use("/api/v1/users",userRoutes)
 
+import formRoutes from './routes/form.routes.js';
+app.use("/api/v1/forms",formRoutes)
+
 export {app}
