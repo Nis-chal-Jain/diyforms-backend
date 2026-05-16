@@ -3,6 +3,8 @@ import { ApiError } from "../utils/ApiError.js";
 import {ApiResponse} from "../utils/ApiResponse.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import JWT from "jsonwebtoken"
+import redis from "../db/redis.js";
+import { sendEmailOtp } from "../utils/emailService.js";
 
 const generateAccessAndRefereshTokens = async(userId) =>{
     try {
@@ -250,6 +252,75 @@ const getUser = asyncHandler(async (req,res) =>{
     .json(new ApiResponse(200, {user}, "User fetched successfully"))
 })
 
+const isUserVerified = asyncHandler(async (req,res) =>{
+    const userId = req.user?._id;
+
+    const user = await User.findById(userId).select("verified");
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+    return res.status(200).json(new ApiResponse(200, { verified: user.verified }, "User verification status fetched successfully"));
+})
+
+const userVerifyOtp = asyncHandler(async (req, res) => {
+
+    const userId = req.user?._id;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if (user.verified) {
+        throw new ApiError(400, "User already verified");
+    }
+
+    const data = await sendEmailOtp(user.email);
+
+    
+    return res.status(200).json(new ApiResponse(200, { data }, "OTP sent to email for verification"));
+});
+
+const verifyEmailOtp = asyncHandler(async (req, res) => {
+
+    const { otp } = req.body;
+    if (!otp || !/^\d{6}$/.test(otp)) {
+        throw new ApiError(400, "Invalid OTP format");
+    }
+
+    const userId = req.user?._id;
+    const user = await User.findById(userId)
+        .select("email verified");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+    if (user.verified) {
+        throw new ApiError(400, "User already verified");
+    }
+
+    const storedOtp = await redis.get(
+        `emailOtp:${user.email}`
+    );
+    if (!storedOtp) {
+        throw new ApiError(400, "OTP expired or not found");
+    }
+    if (storedOtp !== otp) {
+        throw new ApiError(400, "Invalid OTP");
+    }
+
+    user.verified = true;
+    await user.save({ validateBeforeSave: false });
+    await redis.del(`emailOtp:${user.email}`);
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "Email verified successfully"
+        )
+    );
+});
 export {
     signUp,
     login,
@@ -257,5 +328,8 @@ export {
     logout,
     refreshAccessToken,
     updatePassword,
-    updatename
+    updatename,
+    verifyEmailOtp,
+    userVerifyOtp,
+    isUserVerified
 }
