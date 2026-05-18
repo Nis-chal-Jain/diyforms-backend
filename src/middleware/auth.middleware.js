@@ -14,7 +14,7 @@ export const authMiddleware = (req, res, next) => {
         req.user = decoded
         next()
     } catch (error) {
-        throw new ApiError(401, "Invalid access token")
+        next(new ApiError(401, "Invalid access token"))
     }
     
 }
