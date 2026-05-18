@@ -1,10 +1,14 @@
+import mongoose from "mongoose";
 import { Form } from "../models/forms.models.js";
+import { FormsAccess } from "../models/formsacces.models.js";
+import { User } from "../models/users.models.js";
+
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { User } from "../models/users.models.js";
 
 const generateSlug = () => {
+
     const chars =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -20,83 +24,196 @@ const generateSlug = () => {
 };
 
 const createForm = asyncHandler(async (req, res) => {
-    const userid = req.user._id;
 
-    const user = await User.findById(userid)
+    const session = await mongoose.startSession();
 
-    const {
-        title,
-        description,
-        questions,
-        settings
-    } = req.body;
+    try {
 
-    if (!title || title.trim() === "") {
-        throw new ApiError(400, "Title is required");
-    }
+        session.startTransaction();
 
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        throw new ApiError(400, "At least one question is required");
-    }
+        // USER VALIDATION
+        const user = await User.findOne({
+            _id: req.user._id,
+            isDeleted: false
+        }).session(session);
 
-    // Validate questions
-    for (const question of questions) {
-
-        if (!question.type) {
-            throw new ApiError(400, "Question type is required");
+        if (!user) {
+            throw new ApiError(404, "User not found");
         }
 
-        if (!question.label || question.label.trim() === "") {
-            throw new ApiError(400, "Question label is required");
+        if (!user.verified) {
+            throw new ApiError(
+                403,
+                "Please verify your account to create forms"
+            );
         }
 
-        // Validate options
+        // REQUEST BODY VALIDATION
+        const {
+            title,
+            description,
+            questions,
+            settings,
+            userarr = []
+        } = req.body;
+
+        if (!title || title.trim() === "") {
+            throw new ApiError(
+                400,
+                "Title is required"
+            );
+        }
+
         if (
-            ["radio", "checkbox", "select"].includes(question.type)
+            !Array.isArray(questions) ||
+            questions.length === 0
         ) {
-            if (
-                !question.options ||
-                !Array.isArray(question.options) ||
-                question.options.length === 0
-            ) {
+            throw new ApiError(
+                400,
+                "At least one question is required"
+            );
+        }
+
+        for (const question of questions) {
+
+            if(!question.order){
                 throw new ApiError(
                     400,
-                    `Options are required for ${question.type} type`
+                    "Question order is required"
                 );
             }
+            if (!question.type) {
+                throw new ApiError(
+                    400,
+                    "Question type is required"
+                );
+            }
+
+            if (!question.label?.trim()) {
+                throw new ApiError(
+                    400,
+                    "Question label is required"
+                );
+            }
+
+            if (
+                ["radio", "checkbox", "select"]
+                    .includes(question.type)
+            ) {
+
+                if (
+                    !Array.isArray(question.options) ||
+                    question.options.length === 0
+                ) {
+                    throw new ApiError(
+                        400,
+                        `Options are required for ${question.type}`
+                    );
+                }
+            }
         }
+    
+        // RESTRICTED FORM VALIDATION
+        const uniqueUsersEmail = [...new Set(userarr)];
+
+        if (
+            settings?.restricted &&
+            uniqueUsersEmail.length === 0 &&
+            settings?.status !== "draft"
+        ) {
+            throw new ApiError(
+                400,
+                "Restricted forms require allowed users"
+            );
+        }
+
+        // GENERATE UNIQUE SLUG
+        let formSlug;
+
+        do {
+            formSlug = generateSlug();
+        } while (
+            await Form.findOne({ formSlug })
+                .session(session)
+        );
+
+        // CREATE FORM
+        const form = await Form.create(
+            [{
+                formSlug,
+                title: title.trim(),
+                description,
+                questions,
+                settings: {
+                    status:
+                        settings?.status || "draft",
+
+                    restricted:
+                        settings?.restricted || false
+                },
+                author: req.user._id
+            }],
+            { session }
+        );
+
+        const createdForm = form[0];
+
+        // CREATE ACCESS ENTRIES
+        if (uniqueUsersEmail.length > 0) {
+
+            const formAccessEntries =
+                uniqueUsersEmail.map(userEmail => ({
+                    form: createdForm._id,
+                    userEmail
+                }))
+
+            await FormsAccess.insertMany(
+                formAccessEntries,
+                {
+                    session,
+                    ordered: true
+                }
+            );
+        }
+
+        // UPDATE USER STATS
+        await User.updateOne(
+            {
+                _id: req.user._id
+            },
+            {
+                $inc: {
+                    "usage.formsCreated": 1,
+                    "formLimits.monthlyCreated": 1
+                },
+                $set: {
+                    lastformCreatedAt: new Date()
+                }
+            },
+            { session }
+        );
+
+        // COMMIT TRANSACTION
+        await session.commitTransaction();
+
+        return res.status(201).json(
+            new ApiResponse(
+                201,
+                createdForm,
+                "Form created successfully"
+            )
+        );
+
+    } catch (error) {
+
+        await session.abortTransaction();
+
+        throw error;
+
+    } finally {
+
+        session.endSession();
     }
-
-    // Generate unique 6-char slug
-    let formSlug;
-
-    do {
-        formSlug = generateSlug();
-    } while (await Form.findOne({ formSlug }));
-
-    //TODO
-    // add restricted logic here
-    //
-
-    const form = await Form.create({
-        formSlug,
-        title,
-        description,
-        questions,
-        settings: {
-            status: settings?.status || "draft",
-            restricted: settings?.restricted || false
-        },
-        author: req.user._id
-    });
-
-    return res.status(201).json(
-        new ApiResponse(
-            201,
-            form,
-            "Form created successfully"
-        )
-    );
 });
 
 export { createForm };

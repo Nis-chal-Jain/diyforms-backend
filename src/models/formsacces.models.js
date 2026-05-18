@@ -6,13 +6,12 @@ const formsAccesSchema = new mongoose.Schema({
         ref:"Form",
         required:true
     },
-    user:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:"User",
+    userEmail:{
+        type:String,
         required:true
     },
 })
 
 formsAccesSchema.index({form:1,user:1})
 
-export const FormsAccess = mongoose.model("FormsAccess", formsaccesSchema);
+export const FormsAccess = mongoose.model("FormsAccess", formsAccesSchema);

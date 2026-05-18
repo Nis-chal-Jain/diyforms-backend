@@ -24,12 +24,16 @@ const questionSchema = new mongoose.Schema({
 
     //only when the type is radio or checkbox or select
     options:[{
+        label:{
+            type:String,
+            required:true
+        },
         value:{
             type:String,
             required:true
         }
     }],
-
+    
     //only when the type is number or text or textarea
     validation:{
         min:Number,
