@@ -18,3 +18,22 @@ export const authMiddleware = (req, res, next) => {
     }
     
 }
+
+export const optionalAuthMiddleware = (req, res, next) => {
+    try {
+        const userAccessToken = req.cookies?.accessToken || req.headers?.authorization?.replace("Bearer ", "")
+    
+        if(!userAccessToken){
+            req.user = null
+            return next()
+        }
+    
+        const decoded = JWT.verify(userAccessToken, process.env.JWT_ACCESS_SECRET)
+    
+        req.user = decoded
+        next()
+    } catch (error) {
+        next()
+    }
+    
+}

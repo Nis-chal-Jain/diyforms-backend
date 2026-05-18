@@ -216,4 +216,56 @@ const createForm = asyncHandler(async (req, res) => {
     }
 });
 
-export { createForm };
+const getForms = asyncHandler(async (req, res) => {
+
+    const slug = req.params.slug;
+
+    const form = await Form.findOne({
+        formSlug: slug
+    });
+
+    if (!form) {
+        throw new ApiError(404, "Form not found");
+    }
+
+    // PUBLIC FORM → no login needed
+    if (!form.settings.restricted) {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                form,
+                "Form retrieved successfully"
+            )
+        );
+    }
+
+    // RESTRICTED FORM → login required
+    if (!req.user) {
+        throw new ApiError(401, "Login required");
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    const accessEntry = await FormsAccess.findOne({
+        form: form._id,
+        userEmail: user.email
+    });
+
+    if (!accessEntry) {
+        throw new ApiError(403, "Access denied");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            form,
+            "Form retrieved successfully"
+        )
+    );
+});
+
+export { createForm, getForms };
