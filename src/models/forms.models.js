@@ -86,6 +86,11 @@ const formSchema = new mongoose.Schema({
     analyticsUpToDate:{
         type:Boolean,
         default:false
+    },
+
+    totalResponses:{
+        type:Number,
+        default:0
     }
 
 },{ timestamps:true });

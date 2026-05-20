@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Form } from "../models/forms.models.js";
 import { FormsAccess } from "../models/formsacces.models.js";
 import { User } from "../models/users.models.js";
+import { Response } from "../models/responses.models.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -259,6 +260,15 @@ const getForms = asyncHandler(async (req, res) => {
         throw new ApiError(403, "Access denied");
     }
 
+    const alreadySubmitted = await Response.findOne({
+        form: form._id,
+        email: user.email
+    });
+    
+    if(alreadySubmitted) {
+        throw new ApiError(400, "You have already submitted this form")
+    }
+
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -268,4 +278,62 @@ const getForms = asyncHandler(async (req, res) => {
     );
 });
 
-export { createForm, getForms };
+const updateForm = asyncHandler(async (req, res) => {
+    const slug = req.params.slug;
+
+    const form = await Form.findOne({
+        formSlug: slug,
+    })
+    if (!form) {
+        throw new ApiError(404, "Form not found");
+    }
+
+    if (form.author.toString() !== req.user._id.toString()) {
+        throw new ApiError(403, "You don't have permission to update this form");
+    }
+
+    // Update form 
+    const updatedForm = await Form.findOneAndUpdate(
+        { formSlug: slug },
+        { $set: req.body },
+        { new: true }
+    );
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            updatedForm,
+            "Form updated successfully"
+        )
+    );
+});
+
+const deleteForm = asyncHandler(async (req, res) => {
+    const slug = req.params.slug;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if(user._id.toString() !== form.author.toString()) {
+        throw new ApiError(403, "You don't have permission to delete this form");
+    }
+
+    const form = await Form.findOneAndDelete({
+        formSlug: slug,
+    });
+
+    if (!form) {
+        throw new ApiError(404, "Form not found");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            null,
+            "Form deleted successfully"
+        )
+    );
+})
+export { createForm, getForms, updateForm, deleteForm };
