@@ -18,6 +18,12 @@ app.use("/api/v1/users",userRoutes)
 import formRoutes from './routes/form.routes.js';
 app.use("/api/v1/forms",formRoutes)
 
+import responseRoutes from './routes/response.routes.js';
+app.use("/api/v1/responses",responseRoutes)
+
+import analyticsRoutes from './routes/analytics.routes.js';
+app.use("/api/v1/analytics", analyticsRoutes);
+
 app.use(errorHandler);
 
 export {app}
