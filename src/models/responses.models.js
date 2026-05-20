@@ -20,19 +20,14 @@ const responseSchema = new mongoose.Schema({
         index:true
     },
 
-    respondent:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:"User",
-        default:null
+    email:{
+        type:String,
+        required:false,
+        default:null,
     },
 
-    answers:[answerSchema],
-
-    submittedAt:{
-        type:Date,
-        default:Date.now
-    }
-
+    answers:[answerSchema]
+    
 },{ timestamps:true });
 
 export const Response = mongoose.model("Response", responseSchema);
