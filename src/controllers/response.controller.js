@@ -274,6 +274,12 @@ const submitResponse = asyncHandler(async (req, res) => {
         }
     );
 
+    //author
+    await User.findByIdAndUpdate(
+        form.author._id,
+        { $inc: { "usage.responsesCollected": 1 } }
+    );
+
     return res.status(201).json(
         new ApiResponse(
             201,
