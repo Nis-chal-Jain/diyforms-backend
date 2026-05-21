@@ -217,6 +217,22 @@ const createForm = asyncHandler(async (req, res) => {
     }
 });
 
+const listMyForms = asyncHandler(async (req, res) => {
+    const forms = await Form.find({ author: req.user._id })
+        .sort({ createdAt: -1 })
+        .select(
+            "formSlug title description settings totalResponses createdAt updatedAt"
+        );
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            { forms },
+            "Forms fetched successfully"
+        )
+    );
+});
+
 const getForms = asyncHandler(async (req, res) => {
 
     const slug = req.params.slug;
@@ -336,4 +352,4 @@ const deleteForm = asyncHandler(async (req, res) => {
         )
     );
 })
-export { createForm, getForms, updateForm, deleteForm };
+export { createForm, listMyForms, getForms, updateForm, deleteForm };
