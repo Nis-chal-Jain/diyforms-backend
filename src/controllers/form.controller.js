@@ -402,4 +402,39 @@ const stopResponse = asyncHandler(async (req, res) => {
         )
     )
 })
-export { createForm, listMyForms, getForms, updateForm, deleteForm, stopResponse };
+
+const resumeResponse = asyncHandler(async (req, res) => {
+    
+    const slug = req.params.slug;
+    const form = await Form.findOne({
+        formSlug: slug,
+    });
+    const user = await User.findById(req.user._id);
+    if(!form) {
+        throw new ApiError(404, "Form not found");
+    }
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+    if(user._id.toString() !== form.author.toString()) {
+        throw new ApiError(403, "You don't have permission to resume responses for this form");
+    }
+    if (form.settings.status === "published") {
+        throw new ApiError(400, "This form is already published");
+    }
+    
+    const updatedForm = await Form.findOneAndUpdate(
+        { formSlug: slug },
+        { $set: { "settings.status": "published" } },
+        { new: true }
+    );
+    
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            updatedForm,
+            "Form responses resumed successfully"
+        )
+    )
+})
+export { createForm, listMyForms, getForms, updateForm, deleteForm, stopResponse, resumeResponse };
