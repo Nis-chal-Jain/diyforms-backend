@@ -237,11 +237,27 @@ const getForms = asyncHandler(async (req, res) => {
 
     const slug = req.params.slug;
 
-    const form = await Form.findOne({
-        formSlug: slug
-    });
+    const form = await Form.findOne({ formSlug: slug });
 
     if (!form) {
+        throw new ApiError(404, "Form not found");
+    }
+
+    const isAuthor =
+        req.user?._id &&
+        form.author.toString() === req.user._id.toString();
+
+    if (isAuthor) {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                form,
+                "Form retrieved successfully"
+            )
+        );
+    }
+
+    if (form.settings.status !== "published") {
         throw new ApiError(404, "Form not found");
     }
 
@@ -332,17 +348,17 @@ const deleteForm = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User not found");
     }
 
-    if(user._id.toString() !== form.author.toString()) {
-        throw new ApiError(403, "You don't have permission to delete this form");
-    }
-
-    const form = await Form.findOneAndDelete({
-        formSlug: slug,
-    });
+    const form = await Form.findOne({ formSlug: slug });
 
     if (!form) {
         throw new ApiError(404, "Form not found");
     }
+
+    if (user._id.toString() !== form.author.toString()) {
+        throw new ApiError(403, "You don't have permission to delete this form");
+    }
+
+    await Form.findOneAndDelete({ formSlug: slug });
 
     return res.status(200).json(
         new ApiResponse(
@@ -352,4 +368,38 @@ const deleteForm = asyncHandler(async (req, res) => {
         )
     );
 })
-export { createForm, listMyForms, getForms, updateForm, deleteForm };
+
+const stopResponse = asyncHandler(async (req, res) => {
+    const slug = req.params.slug;
+    const form = await Form.findOne({
+        formSlug: slug,
+    });
+    const user = await User.findById(req.user._id);
+    if(!form) {
+        throw new ApiError(404, "Form not found");
+    }
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+    if(user._id.toString() !== form.author.toString()) {
+        throw new ApiError(403, "You don't have permission to stop responses for this form");
+    }
+    if (form.settings.status === "archived") {
+        throw new ApiError(400, "This form is already archived");
+    }
+
+    const updatedForm = await Form.findOneAndUpdate(
+        { formSlug: slug },
+        { $set: { "settings.status": "archived" } },
+        { new: true }
+    );
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            updatedForm,
+            "Form responses stopped successfully"
+        )
+    )
+})
+export { createForm, listMyForms, getForms, updateForm, deleteForm, stopResponse };

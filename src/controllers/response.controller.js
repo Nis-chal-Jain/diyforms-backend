@@ -58,7 +58,7 @@ const submitResponse = asyncHandler(async (req, res) => {
 
         const access = await FormsAccess.findOne({
             form: form._id,
-            email
+            userEmail: email
         });
 
         if (!access) {
