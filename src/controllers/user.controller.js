@@ -321,6 +321,54 @@ const verifyEmailOtp = asyncHandler(async (req, res) => {
         )
     );
 });
+
+const forgotPasswordSend = asyncHandler(async (req,res) =>{
+    const {email,username} = req.body
+    if(!email && !username){
+        throw new ApiError(400,"Email or username is required")
+    }
+    const user = await User.findOne({
+        $or: [{ email: email }, { username:username }]
+    })
+    if(!user){
+        throw new ApiError(404,"User not found with the provided username")
+    }
+    await sendEmailOtp(user.email)
+    return res.status(200).json(new ApiResponse(200, {}, "OTP sent to email for password reset"))
+})
+
+const forgotPasswordVerifyOtp = asyncHandler(async (req,res) =>{
+    const {email,username, otp, newPassword} = req.body
+    if(!email && !username){
+        throw new ApiError(400,"Email or username is required")
+    }
+    if(!otp || !/^\d{6}$/.test(otp)){
+        throw new ApiError(400,"Invalid OTP format")
+    }
+    if(!newPassword){
+        throw new ApiError(400,"New password is required")
+    }
+    const user = await User.findOne({
+        $or: [{ email: email }, { username: username }]
+    })
+    if(!user){
+        throw new ApiError(404,"User not found with the provided username")
+    }
+    const storedOtp = await redis.get(
+        `emailOtp:${user.email}`
+    )
+    if(!storedOtp){
+        throw new ApiError(400,"OTP expired or not found")
+    }
+    if(storedOtp !== otp){
+        throw new ApiError(400,"Invalid OTP")
+    }
+    user.password = newPassword
+    await user.validate(["password"])
+    await user.save({validateBeforeSave: false})
+    await redis.del(`emailOtp:${user.email}`)
+    return res.status(200).json(new ApiResponse(200, {}, "Password reset successfully"))
+})
 export {
     signUp,
     login,
@@ -331,5 +379,7 @@ export {
     updatename,
     verifyEmailOtp,
     userVerifyOtp,
-    isUserVerified
+    isUserVerified,
+    forgotPasswordSend,
+    forgotPasswordVerifyOtp
 }

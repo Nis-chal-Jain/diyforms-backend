@@ -12,9 +12,15 @@ const getResendClient = () => {
 export const sendEmailOtp = async (email) => {
     const resend = getResendClient();
 
-    const otp = Math.floor(
-        100000 + Math.random() * 900000
-    ).toString();
+    let otp;
+    if(redis.get(`emailOtp:${email}`)){
+        otp = await redis.get(`emailOtp:${email}`)
+    }
+    if (!otp) {
+        otp = Math.floor(
+            100000 + Math.random() * 900000
+        ).toString();
+    }
 
     // Store OTP for 5 minutes
     await redis.set(

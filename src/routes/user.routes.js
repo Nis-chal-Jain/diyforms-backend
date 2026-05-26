@@ -9,7 +9,9 @@ import {
     updatename,
     verifyEmailOtp,
     userVerifyOtp,
-    isUserVerified
+    isUserVerified,
+    forgotPasswordSend,
+    forgotPasswordVerifyOtp
 } from "../controllers/user.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
@@ -25,5 +27,7 @@ router.route("/user").get(authMiddleware, getUser)
 router.route("/send-email-otp").post(authMiddleware, userVerifyOtp)
 router.route("/verify-email-otp").post(authMiddleware, verifyEmailOtp)
 router.route("/is-verified").get(authMiddleware, isUserVerified)
+router.route("/forgot-password/send-otp").post(forgotPasswordSend)
+router.route("/forgot-password/verify-otp").post(forgotPasswordVerifyOtp)
 
 export default router;
