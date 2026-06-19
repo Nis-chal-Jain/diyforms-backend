@@ -3,11 +3,41 @@ import { Form } from "../models/forms.models.js";
 import { FormsAccess } from "../models/formsacces.models.js";
 import { User } from "../models/users.models.js";
 import { Response } from "../models/responses.models.js";
-
+import redis from "../db/redis.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
+async function setFormInCache(form) {
+    if (!form?.formSlug) return;
+    const cacheKey = `form:${form.formSlug}`;
+    const payload = typeof form === "string" ? form : JSON.stringify(form);
+    await redis.set(cacheKey, payload, "EX", 3600);
+}
+
+async function getFormFromCache(slug) {
+    if (!slug) return null;
+    const cacheKey = `form:${slug}`;
+    const cachedForm = await redis.get(cacheKey);
+    if (!cachedForm) return null;
+
+    try {
+        const parsed = JSON.parse(cachedForm);
+
+        if (typeof parsed === "string") {
+            return JSON.parse(parsed);
+        }
+
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+function deleteFormFromCache(slug) {
+    if (!slug) return;
+    const cacheKey = `form:${slug}`;
+    redis.del(cacheKey);
+}
 const generateSlug = () => {
 
     const chars =
@@ -236,9 +266,11 @@ const listMyForms = asyncHandler(async (req, res) => {
 const getForms = asyncHandler(async (req, res) => {
 
     const slug = req.params.slug;
-
-    const form = await Form.findOne({ formSlug: slug });
-
+    let form = await getFormFromCache(slug);
+    if(!form) {
+        form = await Form.findOne({ formSlug: slug });
+        if(form) await setFormInCache(form);
+    }
     if (!form) {
         throw new ApiError(404, "Form not found");
     }
@@ -359,7 +391,7 @@ const deleteForm = asyncHandler(async (req, res) => {
     }
 
     await Form.findOneAndDelete({ formSlug: slug });
-
+    await deleteFormFromCache(slug);
     return res.status(200).json(
         new ApiResponse(
             200,
