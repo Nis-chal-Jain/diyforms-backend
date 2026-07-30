@@ -11,7 +11,8 @@ import {
     userVerifyOtp,
     isUserVerified,
     forgotPasswordSend,
-    forgotPasswordVerifyOtp
+    forgotPasswordVerifyOtp,
+    googleLogin
 } from "../controllers/user.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
@@ -29,5 +30,6 @@ router.route("/verify-email-otp").post(authMiddleware, verifyEmailOtp)
 router.route("/is-verified").get(authMiddleware, isUserVerified)
 router.route("/forgot-password/send-otp").post(forgotPasswordSend)
 router.route("/forgot-password/verify-otp").post(forgotPasswordVerifyOtp)
+router.route("/google-login").post(googleLogin)
 
 export default router;

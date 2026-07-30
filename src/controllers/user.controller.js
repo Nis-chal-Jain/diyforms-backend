@@ -5,6 +5,15 @@ import {asyncHandler} from "../utils/asyncHandler.js";
 import JWT from "jsonwebtoken"
 import redis from "../db/redis.js";
 import { sendEmailOtp } from "../utils/emailService.js";
+import { OAuth2Client } from "google-auth-library";
+
+const keys = process.env.OAUTH2_KEYS_JSON ? JSON.parse(process.env.OAUTH2_KEYS_JSON) : {};
+
+const googleClient = new OAuth2Client({
+      clientId: keys.web.client_id,
+      clientSecret: keys.web.client_secret,
+    //   redirectUri: keys.web.redirect_uris[0]
+    });
 
 const generateAccessAndRefereshTokens = async(userId) =>{
     try {
@@ -136,6 +145,86 @@ const logout = asyncHandler(async (req,res) =>{
     .clearCookie("refreshToken", options)
     .json(new ApiResponse(200, {}, "User logged Out"))
 })
+
+const googleLogin = asyncHandler(async (req, res) => {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+        throw new ApiError(400, "Google ID Token is required");
+    }
+
+    // Verify token with Google
+    const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    if (!payload) {
+        throw new ApiError(401, "Invalid Google token");
+    }
+
+    const {
+        email,
+        name,
+        picture,
+        sub: googleId,
+        email_verified,
+    } = payload;
+
+    if (!email_verified) {
+        throw new ApiError(401, "Google email is not verified");
+    }
+
+    // Find existing user
+    let user = await User.findOne({
+        email,
+        isDeleted: false,
+    }).select("+refreshToken");
+
+    // Create account if doesn't exist
+    if (!user) {
+        user = await User.create({
+            email,
+            name,
+            username: `${email.split("@")[0]}_${Math.floor(Math.random() * 10000)}`,
+            verified: true,
+            googleId,
+            avatar: picture,
+            provider: "google",
+            password: null,
+        });
+    }
+
+    const { accessToken, refreshToken } =
+        await generateAccessAndRefereshTokens(user._id);
+
+    const loggedInUser = await User.findById(user._id).select(
+        "-password -refreshToken"
+    );
+
+    const options = {
+        httpOnly: true,
+        secure: true,
+    };
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: loggedInUser,
+                    accessToken,
+                    refreshToken,
+                },
+                "Google login successful"
+            )
+        );
+});
 
 const refreshAccessToken = asyncHandler(async (req,res) =>{
     const incomingRefreshToken = req.cookies?.refreshToken || req.body.refreshToken
@@ -381,5 +470,6 @@ export {
     userVerifyOtp,
     isUserVerified,
     forgotPasswordSend,
-    forgotPasswordVerifyOtp
+    forgotPasswordVerifyOtp,
+    googleLogin
 }

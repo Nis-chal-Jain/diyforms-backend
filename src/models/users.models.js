@@ -22,7 +22,6 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
       minlength: 6,
       select: false,
     },
@@ -96,16 +95,29 @@ const userSchema = new mongoose.Schema(
 );
 
 // Password hashing
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+userSchema.pre("save", async function (next) {
 
-  this.password = await bcrypt.hash(this.password, 10);
+    if (!this.password) {
+        return;
+    }
+
+    if (!this.isModified("password")) {
+        return;
+    }
+
+    this.password = await bcrypt.hash(this.password, 10);
+
 });
 
 // Compare password
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
+userSchema.methods.comparePassword = async function(password){
+
+    if (!this.password) {
+        return false;
+    }
+
+    return bcrypt.compare(password, this.password);
+}
 
 // JWT generation
 userSchema.methods.generateRefreshToken = function () {
