@@ -6,7 +6,7 @@ Backend API for **DIYForms** — a minimalist form builder where users can creat
 
 Built with **Node.js**, **Express 5**, **MongoDB**, and **Redis**.
 
-This README is written with help of AI
+This README is written with **help** of AI
 
 ## Features
 
