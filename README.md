@@ -93,6 +93,8 @@ cp .env.sample .env
 | `OAUTH2_KEYS_JSON` | Google OAuth client JSON (stringified) |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `NODE_ENV` | `development` or `production` |
+| `MCP_BASE_URL` | Public base URL of the MCP server (returned when minting a connector token) |
+| `FREE_MONTHLY_FORMS` | Monthly form cap for the free plan (default: `3`) |
 
 ### 3. Run the server
 
@@ -126,19 +128,29 @@ All routes are prefixed with `/api/v1`.
 
 | Method | Endpoint | Auth | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/` | ✓ | List forms owned by the current user |
-| POST | `/` | ✓ | Create a new form |
-| GET | `/:slug` | optional | Get a form by slug |
-| POST | `/:slug` | ✓ | Update a form |
-| DELETE | `/:slug` | ✓ | Delete a form |
-| PATCH | `/:slug/stop-response` | ✓ | Pause response collection |
-| PATCH | `/:slug/resume-response` | ✓ | Resume response collection |
+| GET | `/` | JWT or connector | List forms owned by the current user |
+| POST | `/` | JWT or connector | Create a new form (connector always saves a `draft` with `source: claude`) |
+| GET | `/:slug` | optional (JWT or connector) | Get a form by slug (authors can read their own drafts) |
+| POST | `/:slug` | JWT or connector | Update a form (connector can only edit drafts; cannot change status) |
+| DELETE | `/:slug` | JWT only | Delete a form |
+| PATCH | `/:slug/stop-response` | JWT only | Pause response collection |
+| PATCH | `/:slug/resume-response` | JWT only | Resume / publish response collection |
+
+### Connector tokens — `/api/v1/connector-tokens`
+
+Minted by a logged-in user so an MCP client can act on their behalf. Connector tokens (`fm_…`) cannot mint more tokens, change account settings, publish, archive, resume, or delete forms.
+
+| Method | Endpoint | Auth | Description |
+| ------ | -------- | ---- | ----------- |
+| POST | `/` | JWT only | Create a connector token (raw secret shown once) |
+| GET | `/` | JWT only | List active tokens (name, last4, lastUsedAt, createdAt) |
+| DELETE | `/:id` | JWT only | Revoke a token |
 
 ### Responses — `/api/v1/responses`
 
 | Method | Endpoint | Auth | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/:slug` | optional | Get form schema for filling out |
+| GET | `/:slug` | JWT or connector | List submitted responses (author only) |
 | POST | `/:slug` | optional | Submit a response |
 
 Restricted forms require a logged-in, verified user with explicit access and allow only one submission per user.
@@ -159,8 +171,8 @@ Restricted forms require a logged-in, verified user with explicit access and all
 
 Protected routes accept the access token via:
 
-- **Cookie:** `accessToken`
-- **Header:** `Authorization: Bearer <token>`
+- **Cookie:** `accessToken` (JWT only)
+- **Header:** `Authorization: Bearer <token>` — JWT, or a connector token starting with `fm_` on routes that allow it
 
 Refresh tokens are issued on login and can be exchanged at `/api/v1/users/refresh-token`.
 

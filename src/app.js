@@ -24,6 +24,9 @@ app.use("/api/v1/users",userRoutes)
 import formRoutes from './routes/form.routes.js';
 app.use("/api/v1/forms",formRoutes)
 
+import connectorRoutes from './routes/connector.routes.js';
+app.use("/api/v1/connector-tokens", connectorRoutes)
+
 import responseRoutes from './routes/response.routes.js';
 app.use("/api/v1/responses",responseRoutes)
 

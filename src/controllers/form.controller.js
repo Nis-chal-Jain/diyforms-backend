@@ -7,6 +7,29 @@ import redis from "../db/redis.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { validateQuestions } from "../utils/validateQuestions.js";
+
+const FORM_STATUSES = ["draft", "published", "archived"];
+
+const getEffectivePlan = (user) => {
+    const subscription = user.subscription || {};
+    const validTill = subscription.validTill;
+    const expired = validTill && new Date(validTill).getTime() < Date.now();
+    if (subscription.isActive === false || expired) {
+        return "free";
+    }
+    return subscription.plan || "free";
+};
+
+const isEarlierCalendarMonthUtc = (date, now) => {
+    if (!date) return true;
+    const last = new Date(date);
+    return (
+        last.getUTCFullYear() < now.getUTCFullYear() ||
+        (last.getUTCFullYear() === now.getUTCFullYear() &&
+            last.getUTCMonth() < now.getUTCMonth())
+    );
+};
 
 async function setFormInCache(form) {
     if (!form?.formSlug) return;
@@ -33,10 +56,10 @@ async function getFormFromCache(slug) {
         return null;
     }
 }
-function deleteFormFromCache(slug) {
+async function deleteFormFromCache(slug) {
     if (!slug) return;
     const cacheKey = `form:${slug}`;
-    redis.del(cacheKey);
+    await redis.del(cacheKey);
 }
 const generateSlug = () => {
 
@@ -79,6 +102,27 @@ const createForm = asyncHandler(async (req, res) => {
             );
         }
 
+        const now = new Date();
+        const needsMonthReset = isEarlierCalendarMonthUtc(
+            user.formLimits?.lastReset,
+            now
+        );
+        let monthlyCreated = user.formLimits?.monthlyCreated || 0;
+        if (needsMonthReset) {
+            monthlyCreated = 0;
+        }
+
+        const effectivePlan = getEffectivePlan(user);
+        const freeLimit = Number(process.env.FREE_MONTHLY_FORMS || 3);
+        if (effectivePlan === "free" && monthlyCreated >= freeLimit) {
+            throw new ApiError(
+                403,
+                `Free plan limit reached: you can create ${freeLimit} forms per month. Upgrade to create more.`
+            );
+        }
+
+        const isConnector = req.authMethod === "connector";
+
         // REQUEST BODY VALIDATION
         const {
             title,
@@ -95,62 +139,34 @@ const createForm = asyncHandler(async (req, res) => {
             );
         }
 
-        if (
-            !Array.isArray(questions) ||
-            questions.length === 0
-        ) {
-            throw new ApiError(
-                400,
-                "At least one question is required"
-            );
+        if (title.trim().length > 200) {
+            throw new ApiError(400, "Title must be at most 200 characters");
         }
 
-        for (const question of questions) {
-
-            if(!question.order){
-                throw new ApiError(
-                    400,
-                    "Question order is required"
-                );
+        if (description !== undefined && description !== null) {
+            if (typeof description !== "string") {
+                throw new ApiError(400, "Description must be a string");
             }
-            if (!question.type) {
-                throw new ApiError(
-                    400,
-                    "Question type is required"
-                );
-            }
-
-            if (!question.label?.trim()) {
-                throw new ApiError(
-                    400,
-                    "Question label is required"
-                );
-            }
-
-            if (
-                ["radio", "checkbox", "select"]
-                    .includes(question.type)
-            ) {
-
-                if (
-                    !Array.isArray(question.options) ||
-                    question.options.length === 0
-                ) {
-                    throw new ApiError(
-                        400,
-                        `Options are required for ${question.type}`
-                    );
-                }
+            if (description.length > 2000) {
+                throw new ApiError(400, "Description must be at most 2000 characters");
             }
         }
-    
-        // RESTRICTED FORM VALIDATION
-        const uniqueUsersEmail = [...new Set(userarr)];
+
+        validateQuestions(questions);
+
+        const uniqueUsersEmail = isConnector ? [] : [...new Set(userarr)];
+
+        const formStatus = isConnector
+            ? "draft"
+            : (settings?.status || "draft");
+        const formRestricted = isConnector
+            ? false
+            : (settings?.restricted || false);
 
         if (
-            settings?.restricted &&
+            formRestricted &&
             uniqueUsersEmail.length === 0 &&
-            settings?.status !== "draft"
+            formStatus !== "draft"
         ) {
             throw new ApiError(
                 400,
@@ -176,13 +192,11 @@ const createForm = asyncHandler(async (req, res) => {
                 description,
                 questions,
                 settings: {
-                    status:
-                        settings?.status || "draft",
-
-                    restricted:
-                        settings?.restricted || false
+                    status: formStatus,
+                    restricted: formRestricted
                 },
-                author: req.user._id
+                author: req.user._id,
+                source: isConnector ? "claude" : "dashboard"
             }],
             { session }
         );
@@ -207,20 +221,27 @@ const createForm = asyncHandler(async (req, res) => {
             );
         }
 
-        // UPDATE USER STATS
+        const userUpdate = {
+            $inc: {
+                "usage.formsCreated": 1
+            },
+            $set: {
+                lastFormCreatedAt: new Date()
+            }
+        };
+
+        if (needsMonthReset) {
+            userUpdate.$set["formLimits.lastReset"] = now;
+            userUpdate.$set["formLimits.monthlyCreated"] = 1;
+        } else {
+            userUpdate.$inc["formLimits.monthlyCreated"] = 1;
+        }
+
         await User.updateOne(
             {
                 _id: req.user._id
             },
-            {
-                $inc: {
-                    "usage.formsCreated": 1,
-                    "formLimits.monthlyCreated": 1
-                },
-                $set: {
-                    lastformCreatedAt: new Date()
-                }
-            },
+            userUpdate,
             { session }
         );
 
@@ -251,7 +272,7 @@ const listMyForms = asyncHandler(async (req, res) => {
     const forms = await Form.find({ author: req.user._id })
         .sort({ createdAt: -1 })
         .select(
-            "formSlug title description settings totalResponses createdAt updatedAt"
+            "formSlug title description settings totalResponses createdAt updatedAt source"
         );
 
     return res.status(200).json(
@@ -356,12 +377,80 @@ const updateForm = asyncHandler(async (req, res) => {
         throw new ApiError(403, "You don't have permission to update this form");
     }
 
-    // Update form 
+    const isConnector = req.authMethod === "connector";
+
+    if (isConnector) {
+        if (form.settings?.status !== "draft") {
+            throw new ApiError(
+                403,
+                `Claude can only edit drafts. This form is ${form.settings?.status}; the user must edit it in the dashboard.`
+            );
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "settings")) {
+            throw new ApiError(403, "Claude cannot change form settings");
+        }
+    }
+
+    const { title, description, questions, settings } = req.body || {};
+    const $set = {};
+
+    if (title !== undefined) {
+        if (typeof title !== "string" || title.trim() === "") {
+            throw new ApiError(400, "Title is required");
+        }
+        if (title.trim().length > 200) {
+            throw new ApiError(400, "Title must be at most 200 characters");
+        }
+        $set.title = title.trim();
+    }
+
+    if (description !== undefined) {
+        if (typeof description !== "string") {
+            throw new ApiError(400, "Description must be a string");
+        }
+        if (description.length > 2000) {
+            throw new ApiError(400, "Description must be at most 2000 characters");
+        }
+        $set.description = description;
+    }
+
+    if (questions !== undefined) {
+        if (form.totalResponses > 0) {
+            throw new ApiError(
+                400,
+                "This form already has responses, so its questions can't be changed."
+            );
+        }
+        validateQuestions(questions);
+        $set.questions = questions;
+    }
+
+    if (!isConnector && settings !== undefined) {
+        if (settings === null || typeof settings !== "object" || Array.isArray(settings)) {
+            throw new ApiError(400, "Invalid settings");
+        }
+        if (settings.status !== undefined) {
+            if (!FORM_STATUSES.includes(settings.status)) {
+                throw new ApiError(400, "Invalid form status");
+            }
+            $set["settings.status"] = settings.status;
+        }
+        if (settings.restricted !== undefined) {
+            $set["settings.restricted"] = Boolean(settings.restricted);
+        }
+    }
+
+    if (Object.keys($set).length === 0) {
+        throw new ApiError(400, "No valid fields to update");
+    }
+
     const updatedForm = await Form.findOneAndUpdate(
         { formSlug: slug },
-        { $set: req.body },
+        { $set },
         { new: true }
     );
+
+    await deleteFormFromCache(slug);
 
     return res.status(200).json(
         new ApiResponse(
@@ -426,6 +515,8 @@ const stopResponse = asyncHandler(async (req, res) => {
         { new: true }
     );
 
+    await deleteFormFromCache(slug);
+
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -460,6 +551,8 @@ const resumeResponse = asyncHandler(async (req, res) => {
         { $set: { "settings.status": "published" } },
         { new: true }
     );
+
+    await deleteFormFromCache(slug);
     
     return res.status(200).json(
         new ApiResponse(
