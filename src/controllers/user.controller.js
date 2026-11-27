@@ -75,6 +75,7 @@ const signUp =  asyncHandler(async (req,res) =>{
 )
 
 const login = asyncHandler(async (req,res) =>{
+    console.log("login request received")
     const {email,username,password} = req.body;
 
     if((!email && !username) || !password){

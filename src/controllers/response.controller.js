@@ -293,8 +293,21 @@ const getFormForResponse = asyncHandler(async (req, res) => {
 
     const slug = req.params.slug;
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    let page = parseInt(req.query.page, 10);
+    if (!Number.isFinite(page) || page < 1) {
+        page = 1;
+    }
+
+    let limit = parseInt(req.query.limit, 10);
+    if (!Number.isFinite(limit)) {
+        limit = 10;
+    }
+    if (limit < 1) {
+        limit = 1;
+    }
+    if (limit > 100) {
+        limit = 100;
+    }
 
     const user = req.user;
 

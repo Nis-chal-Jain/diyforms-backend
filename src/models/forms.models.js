@@ -81,6 +81,12 @@ const formSchema = new mongoose.Schema({
         required:true
     },
 
+    source:{
+        type:String,
+        enum:["dashboard","claude"],
+        default:"dashboard"
+    },
+
     questions:[questionSchema],
 
     analyticsUpToDate:{
